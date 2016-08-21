@@ -66,8 +66,9 @@ public class CrawlerTask extends RecursiveAction {
             charset = connection.getContentType().substring(connection.getContentType().indexOf("charset=") + 8);
         }
 
+        //Find matches using buffer
         try (Scanner htmlScanner = new Scanner(connection.getInputStream(), charset == null ? Charset.defaultCharset().name() : charset)) {
-            final List<URL> results = new LinkedList<>();
+            final List<URL> results = new ArrayList<>();
             String nextMatch;
 
             while ((nextMatch = htmlScanner.findWithinHorizon(HREF_PATTERN, 0)) != null) {
