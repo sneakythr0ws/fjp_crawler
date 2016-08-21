@@ -119,6 +119,11 @@ public class CrawlerTest {
     }
 
     @Test
+    public void prepareURLTest() throws MalformedURLException {
+        Assert.assertEquals("https://play.google.com/store", new URL(CrawlerTask.prepareURL(" https://www.play.google.com/store/\"")).toString());
+    }
+
+    @Test
     public void visitConditionTest() throws MalformedURLException {
         CopyOnWriteArrayList<URL> results = new CopyOnWriteArrayList<>();
         new ForkJoinPool().invoke(new CrawlerTask(serverUri.resolve("/withouterrors").toURL(), results::add));
