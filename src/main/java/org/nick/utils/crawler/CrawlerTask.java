@@ -21,7 +21,6 @@ import java.util.stream.Collectors;
 public class CrawlerTask extends RecursiveAction {
 
     public static final int CRAWLER_DISABLE_DEPTH_CHECK = -1;
-    public static final int CRAWLER_DISABLE_FAILS_CHECK = -1;
 
     private static final Pattern HREF_PATTERN = Pattern.compile("<a\\s+(?:[^>]*?\\s+)?href=\"((http://|https://|/)[^\"]*)\"", Pattern.CASE_INSENSITIVE);
 
@@ -33,17 +32,18 @@ public class CrawlerTask extends RecursiveAction {
     private final Consumer<URL> consumer;
     private final int failLimit;
     private final boolean currentDomainOnly;
+    private final boolean checkVisit;
 
 
     public CrawlerTask(URL url, Consumer<URL> consumer) {
-        this(url, consumer, CRAWLER_DISABLE_DEPTH_CHECK, 5, true);
+        this(url, consumer, CRAWLER_DISABLE_DEPTH_CHECK, 5, true, true);
     }
 
-    public CrawlerTask(URL url, Consumer<URL> consumer, int depth, int failLimit, boolean currentDomainOnly) {
-        this(url, depth, 0, ConcurrentHashMap.newKeySet(), consumer, new AtomicInteger(0), failLimit, currentDomainOnly);
+    public CrawlerTask(URL url, Consumer<URL> consumer, int depth, int failLimit, boolean currentDomainOnly, boolean checkVisit) {
+        this(url, depth, 0, ConcurrentHashMap.newKeySet(), consumer, new AtomicInteger(0), failLimit, currentDomainOnly, checkVisit);
     }
 
-    private CrawlerTask(URL url, int depth, int currentDepth, Set<String> visited, Consumer<URL> consumer, AtomicInteger fails, int failLimit, boolean currentDomainOnly) {
+    private CrawlerTask(URL url, int depth, int currentDepth, Set<String> visited, Consumer<URL> consumer, AtomicInteger fails, int failLimit, boolean currentDomainOnly, boolean checkVisit) {
         this.url = url;
         this.depth = depth;
         this.currentDepth = currentDepth;
@@ -52,6 +52,7 @@ public class CrawlerTask extends RecursiveAction {
         this.fails = fails;
         this.failLimit = failLimit;
         this.currentDomainOnly = currentDomainOnly;
+        this.checkVisit = checkVisit;
     }
 
     @Override
@@ -74,8 +75,10 @@ public class CrawlerTask extends RecursiveAction {
                     URL newURL = new URL(prepareHref(nextMatch, url));
 
                     final String preparedHost = prepareURL(newURL.toString());
-                    if (!visited.contains(preparedHost)) {
-                        visited.add(preparedHost);
+                    if (!checkVisit || !visited.contains(preparedHost)) {
+                        if (checkVisit) {
+                            visited.add(preparedHost);
+                        }
 
                         //check domain
                         if (!currentDomainOnly || newURL.getHost().equals(prepareURL(url.getHost())))
@@ -111,34 +114,36 @@ public class CrawlerTask extends RecursiveAction {
         }
     }
 
-    public static String prepareURL(String url) {
+    static String prepareURL(String url) {
         String step1 = url.replaceAll("(www.)|([ ]|[\"])", "");
         return step1.endsWith("/") ? step1.substring(0, step1.length() - 1) : step1;
     }
 
     private List<CrawlerTask> createSubtasks() {
-        int newDepth = this.currentDepth + 1;
-        if (depth == CRAWLER_DISABLE_DEPTH_CHECK || newDepth < depth) {
-            try {
-                URLConnection connection = url.openConnection();
-                connection.connect();
+        if (fails.get() < failLimit) {
+            int newDepth = this.currentDepth + 1;
+            if (depth == CRAWLER_DISABLE_DEPTH_CHECK || newDepth < depth) {
+                try {
+                    URLConnection connection = url.openConnection();
+                    connection.connect();
 
-                int responseCode = ((HttpURLConnection) connection).getResponseCode();
+                    int responseCode = ((HttpURLConnection) connection).getResponseCode();
 
-                if (responseCode >= HttpURLConnection.HTTP_INTERNAL_ERROR && responseCode < 600) {
-                    if (fails.incrementAndGet() >= failLimit) {
-                        System.out.println("Exceeded limit of errors");
-                        return Collections.emptyList();
+                    if (responseCode >= HttpURLConnection.HTTP_INTERNAL_ERROR && responseCode < 600) {
+                        if (fails.incrementAndGet() >= failLimit) {
+                            System.out.println("Exceeded limit of errors");
+                            return Collections.emptyList();
+                        }
+                    } else {
+                        List<URL> results = getLinks(connection);
+
+                        results.forEach(consumer);
+
+                        return results.stream().map(e -> new CrawlerTask(e, depth, newDepth, visited, consumer, fails, failLimit, currentDomainOnly, checkVisit)).collect(Collectors.toList());
                     }
-                } else {
-                    List<URL> results = getLinks(connection);
-
-                    results.forEach(consumer);
-
-                    return results.stream().map(e -> new CrawlerTask(e, depth, newDepth, visited, consumer, fails, failLimit, currentDomainOnly)).collect(Collectors.toList());
+                } catch (IOException e) {
+                    e.printStackTrace();
                 }
-            } catch (IOException e) {
-                e.printStackTrace();
             }
         }
 

@@ -77,7 +77,7 @@ public class CrawlerTest {
         ServletHolder servletHolder = new ServletHolder(new HttpServlet() {
             @Override
             protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-                throw new ServletException("Generated 500" + path);
+                resp.sendError(500, "Generadted 500");
             }
         });
         context.addServlet(servletHolder, "/");
@@ -96,14 +96,17 @@ public class CrawlerTest {
 
     //@Test
     public void googleTest() throws Exception {
-        new ForkJoinPool().invoke(new CrawlerTask(new URL("https://play.google.com"), System.out::println, 2, 5, true));
+        new ForkJoinPool().invoke(new CrawlerTask(new URL("https://play.google.com"), System.out::println, 2, 5, true, true));
     }
 
     @Test
     public void failLimitTest() throws MalformedURLException {
-        //System.out.println(IOUtils.toString(serverUri.resolve("/witherrors").toURL().openStream()));
-        new ForkJoinPool().invoke(new CrawlerTask(serverUri.resolve("/witherrors").toURL(), System.out::println,
-                CrawlerTask.CRAWLER_DISABLE_DEPTH_CHECK, 100000000, true));
+        try {
+            new ForkJoinPool().invoke(new CrawlerTask(serverUri.resolve("/witherrors").toURL(), e -> {
+            }, CrawlerTask.CRAWLER_DISABLE_DEPTH_CHECK, 5, true, false));
+        } catch (StackOverflowError e) {
+            Assert.assertTrue("Limit of fails ignored", false);
+        }
     }
 
     @Test
