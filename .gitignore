@@ -75,7 +75,6 @@ fabric.properties
 .gitignore
 .gradle/
 .idea/
-build.gradle
 gradle/
 gradlew
 gradlew.bat
